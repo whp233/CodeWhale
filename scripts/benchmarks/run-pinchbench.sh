@@ -1,43 +1,29 @@
 #!/usr/bin/env bash
-# run-pinchbench.sh — Run PinchBench benchmarks with CodeWhale model routing.
+# run-pinchbench.sh — Run PinchBench benchmarks with Xiaomi MiMo v2.5.
 #
-# PinchBench evaluates agent performance on real-world tasks (calendar, email,
-# coding, research, file management). It uses OpenClaw as the agent runtime and
-# routes models through OpenRouter by default.
-#
-# Known issues with Xiaomi MiMo v2.5:
-#   1. PinchBench validates models against OpenRouter's /models endpoint.
-#      MiMo models MUST use the openrouter/ prefix or validation is skipped.
-#   2. PinchBench requires OPENROUTER_API_KEY even when using a direct provider.
-#      The --direct-mimo flag sets up a custom OpenAI-compatible endpoint in
-#      OpenClaw's models.json to bypass this.
-#   3. MiMo v2.5 Pro has a 128K context window but PinchBench tasks are small.
-#      No special handling needed, but worth noting for cost estimates.
-#   4. The Xiaomi Token Plan endpoint (token-plan-sgp.xiaomimimo.com) uses
-#      tp- prefixed keys. Pay-as-you-go (api.xiaomimimo.com) uses sk- keys.
-#      Make sure XIAOMI_MIMO_API_KEY matches the endpoint you're using.
-#   5. OpenRouter model ID for MiMo: xiaomi/mimo-v2.5-pro (Pro) or
-#      xiaomi/mimo-v2.5 (Omni). PinchBench expects the full provider/model.
+# Defaults to direct Xiaomi API routing (no OpenRouter needed). Reads the
+# API key from ~/.codewhale/config.toml if not set via environment variables.
 #
 # Usage:
 #   ./scripts/benchmarks/run-pinchbench.sh --help
-#   ./scripts/benchmarks/run-pinchbench.sh --model xiaomi/mimo-v2.5-pro
-#   ./scripts/benchmarks/run-pinchbench.sh --direct-mimo --suite task_calendar
+#   ./scripts/benchmarks/run-pinchbench.sh                    # direct MiMo (default)
+#   ./scripts/benchmarks/run-pinchbench.sh --openrouter       # via OpenRouter
+#   ./scripts/benchmarks/run-pinchbench.sh --suite task_calendar
 #
 # Prerequisites:
 #   - PinchBench cloned (or use --install)
 #   - Python 3.10+ with uv
-#   - OPENROUTER_API_KEY (for OpenRouter routing)
-#   - OR XIAOMI_MIMO_API_KEY + --direct-mimo (for direct Xiaomi API)
+#   - Xiaomi MiMo API key (in env or ~/.codewhale/config.toml)
 #   - A running OpenClaw instance
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CODEWHALE_CONFIG="${HOME}/.codewhale/config.toml"
 
-# Defaults — MiMo v2.5 Pro via OpenRouter
-MODEL="openrouter/xiaomi/mimo-v2.5-pro"
+# Defaults — direct MiMo v2.5 Pro (no OpenRouter)
+MODEL="mimo-v2.5-pro"
 SUITE="all"
 PINCHBENCH_DIR="${PINCHBENCH_DIR:-/tmp/pinchbench}"
 RESULTS_DIR="./results/pinchbench"
@@ -45,28 +31,28 @@ INSTALL_PINCHBENCH=false
 RUNS=1
 JUDGE_MODEL=""
 NO_UPLOAD=true
-DIRECT_MIMO=false
+DIRECT_MIMO=true
 MIMO_BASE_URL=""
+OPENROUTER_MODE=false
 EXTRA_ARGS=()
 
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Run PinchBench benchmarks. Defaults to Xiaomi MiMo v2.5 Pro via OpenRouter.
+Run PinchBench benchmarks. Defaults to Xiaomi MiMo v2.5 Pro via direct API.
 
 Options:
-  --model MODEL           Model ID (default: openrouter/xiaomi/mimo-v2.5-pro)
+  --model MODEL           Model ID (default: mimo-v2.5-pro)
                           Common values:
-                            openrouter/xiaomi/mimo-v2.5-pro  — MiMo Pro via OpenRouter
-                            openrouter/xiaomi/mimo-v2.5      — MiMo Omni via OpenRouter
-                            openrouter/deepseek/deepseek-v4-pro — DeepSeek V4 Pro via OpenRouter
+                            mimo-v2.5-pro       — MiMo Pro (direct Xiaomi API)
+                            mimo-v2.5           — MiMo Omni (direct Xiaomi API)
   --suite SUITE           Task suite: all, automated-only, or comma-separated IDs
   --runs N                Runs per task for averaging (default: 1)
   --judge MODEL           Judge model for LLM grading (default: uses OpenClaw agent)
-  --direct-mimo           Route MiMo directly via Xiaomi API (bypasses OpenRouter)
-                          Requires XIAOMI_MIMO_API_KEY. Sets model to mimo-v2.5-pro.
-  --mimo-base-url URL     Override MiMo API base URL (default: Token Plan Singapore)
+  --openrouter            Route via OpenRouter instead of direct Xiaomi API
+                          Requires OPENROUTER_API_KEY. Uses xiaomi/mimo-v2.5-pro.
+  --mimo-base-url URL     Override MiMo API base URL (default: from config or Token Plan SG)
   --pinchbench-dir DIR    PinchBench install directory (default: /tmp/pinchbench)
   --results-dir DIR       Local results directory (default: ./results/pinchbench)
   --install               Install/clone PinchBench before running
@@ -74,26 +60,26 @@ Options:
   -- [EXTRA_ARGS...]      Additional arguments passed to PinchBench
   -h, --help              Show this help
 
-Environment variables:
-  OPENROUTER_API_KEY      Required for OpenRouter model routing
-  XIAOMI_MIMO_API_KEY     Required for --direct-mimo (or XIAOMI_API_KEY / MIMO_API_KEY)
+Environment variables (direct mode):
+  XIAOMI_MIMO_API_KEY     Xiaomi MiMo API key (or XIAOMI_API_KEY / MIMO_API_KEY)
+                          Falls back to ~/.codewhale/config.toml if unset
   XIAOMI_MIMO_BASE_URL    Override MiMo API endpoint
 
+Environment variables (OpenRouter mode):
+  OPENROUTER_API_KEY      Required when using --openrouter
+
 Examples:
-  # MiMo v2.5 Pro via OpenRouter (default)
+  # Direct MiMo v2.5 Pro (default — no OpenRouter needed)
   $(basename "$0")
 
-  # MiMo v2.5 Pro via direct Xiaomi API
-  $(basename "$0") --direct-mimo
-
-  # Specific tasks with MiMo
-  $(basename "$0") --suite task_calendar,task_stock
-
-  # Install PinchBench and run
+  # Install and run
   $(basename "$0") --install
 
-  # DeepSeek V4 Pro via OpenRouter
-  $(basename "$0") --model openrouter/deepseek/deepseek-v4-pro
+  # Specific tasks
+  $(basename "$0") --suite task_calendar,task_stock
+
+  # Via OpenRouter instead
+  $(basename "$0") --openrouter
 EOF
 }
 
@@ -103,7 +89,7 @@ while [[ $# -gt 0 ]]; do
         --suite) SUITE="$2"; shift 2 ;;
         --runs) RUNS="$2"; shift 2 ;;
         --judge) JUDGE_MODEL="$2"; shift 2 ;;
-        --direct-mimo) DIRECT_MIMO=true; shift ;;
+        --openrouter) OPENROUTER_MODE=true; DIRECT_MIMO=false; shift ;;
         --mimo-base-url) MIMO_BASE_URL="$2"; shift 2 ;;
         --pinchbench-dir) PINCHBENCH_DIR="$2"; shift 2 ;;
         --results-dir) RESULTS_DIR="$2"; shift 2 ;;
@@ -115,23 +101,55 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# ── Direct MiMo mode ────────────────────────────────────────────────────────
-# When --direct-mimo is set, we configure PinchBench to use Xiaomi's API
-# directly instead of routing through OpenRouter. This creates a custom
-# OpenAI-compatible provider entry in OpenClaw's models.json.
-if [[ "$DIRECT_MIMO" == true ]]; then
-    MODEL="mimo-v2.5-pro"
+# ── Read MiMo config from ~/.codewhale/config.toml ──────────────────────────
+# Extracts api_key and base_url from [providers.xiaomi_mimo] section.
+read_codewhale_mimo_config() {
+    local config="$1"
+    local key="" url=""
+    if [[ -f "$config" ]]; then
+        key=$(awk '/\[providers\.xiaomi_mimo\]/{f=1} f && /^api_key/{gsub(/.*= *"/,""); gsub(/".*/,""); print; exit}' "$config" 2>/dev/null || true)
+        url=$(awk '/\[providers\.xiaomi_mimo\]/{f=1} f && /^base_url/{gsub(/.*= *"/,""); gsub(/".*/,""); print; exit}' "$config" 2>/dev/null || true)
+    fi
+    echo "$key|$url"
+}
 
-    # Resolve API key from multiple env var names
+# ── OpenRouter mode ─────────────────────────────────────────────────────────
+if [[ "$OPENROUTER_MODE" == true ]]; then
+    MODEL="openrouter/xiaomi/mimo-v2.5-pro"
+    if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+        echo "Error: --openrouter requires OPENROUTER_API_KEY" >&2
+        exit 1
+    fi
+    echo "OpenRouter mode:"
+    echo "  Model: $MODEL"
+    echo ""
+
+# ── Direct MiMo mode (default) ─────────────────────────────────────────────
+elif [[ "$DIRECT_MIMO" == true ]]; then
+    # Resolve API key: env var > codewhale config.toml
     MIMO_KEY="${XIAOMI_MIMO_API_KEY:-${XIAOMI_API_KEY:-${MIMO_API_KEY:-}}}"
+
     if [[ -z "$MIMO_KEY" ]]; then
-        echo "Error: --direct-mimo requires XIAOMI_MIMO_API_KEY (or XIAOMI_API_KEY / MIMO_API_KEY)" >&2
-        echo "  Token Plan keys (tp-...): https://token-plan-sgp.xiaomimimo.com/v1" >&2
-        echo "  Pay-as-you-go keys (sk-...): https://api.xiaomimimo.com/v1" >&2
+        # Try reading from codewhale config
+        IFS='|' read -r cfg_key cfg_url <<< "$(read_codewhale_mimo_config "$CODEWHALE_CONFIG")"
+        if [[ -n "$cfg_key" ]]; then
+            MIMO_KEY="$cfg_key"
+            echo "Read MiMo API key from $CODEWHALE_CONFIG"
+            # Use config base_url if not overridden
+            if [[ -z "$MIMO_BASE_URL" && -n "$cfg_url" ]]; then
+                MIMO_BASE_URL="$cfg_url"
+            fi
+        fi
+    fi
+
+    if [[ -z "$MIMO_KEY" ]]; then
+        echo "Error: No MiMo API key found." >&2
+        echo "  Set XIAOMI_MIMO_API_KEY env var, or configure [providers.xiaomi_mimo] in" >&2
+        echo "  ~/.codewhale/config.toml" >&2
         exit 1
     fi
 
-    # Determine base URL: flag > env > default (Token Plan Singapore)
+    # Determine base URL: flag > env > config > default (Token Plan Singapore)
     if [[ -z "$MIMO_BASE_URL" ]]; then
         MIMO_BASE_URL="${XIAOMI_MIMO_BASE_URL:-https://token-plan-sgp.xiaomimimo.com/v1}"
     fi
@@ -154,15 +172,6 @@ if [[ "$DIRECT_MIMO" == true ]]; then
     # Export for PinchBench's lib_agent.py custom provider setup
     export OPENAI_API_KEY="$MIMO_KEY"
     export OPENAI_BASE_URL="$MIMO_BASE_URL"
-fi
-
-# ── Prereq checks ───────────────────────────────────────────────────────────
-if [[ "$DIRECT_MIMO" != true ]]; then
-    # OpenRouter mode — need the key
-    if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-        echo "Warning: OPENROUTER_API_KEY not set. PinchBench may fail model validation." >&2
-        echo "  Either set OPENROUTER_API_KEY or use --direct-mimo with XIAOMI_MIMO_API_KEY." >&2
-    fi
 fi
 
 # ── Install PinchBench ──────────────────────────────────────────────────────
@@ -201,7 +210,7 @@ cat > "$METADATA_FILE" <<META
     "git_commit": "$(cd "$REPO_ROOT" && git rev-parse HEAD 2>/dev/null || echo unknown)",
     "pinchbench_commit": "$(git -C "$PINCHBENCH_DIR" rev-parse HEAD 2>/dev/null || echo unknown)",
     "model": "$MODEL",
-    "routing": "$(if [[ "$DIRECT_MIMO" == true ]]; then echo "direct-xiaomi"; else echo "openrouter"; fi)",
+    "routing": "$(if [[ "$OPENROUTER_MODE" == true ]]; then echo "openrouter"; else echo "direct-xiaomi"; fi)",
     "suite": "$SUITE",
     "runs": $RUNS,
     "timestamp_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
@@ -221,7 +230,7 @@ if [[ "$NO_UPLOAD" == true ]]; then
     PB_ARGS+=("--no-upload")
 fi
 
-# Pass direct-mimo endpoint info via env for lib_agent.py's custom provider setup
+# Pass direct-mimo endpoint info for lib_agent.py's custom provider setup
 if [[ "$DIRECT_MIMO" == true ]]; then
     PB_ARGS+=("--base-url" "$MIMO_BASE_URL")
 fi
@@ -233,10 +242,10 @@ echo "  Model:    $MODEL"
 echo "  Suite:    $SUITE"
 echo "  Runs:     $RUNS"
 echo "  Output:   $RESULTS_DIR"
-if [[ "$DIRECT_MIMO" == true ]]; then
-    echo "  Routing:  Direct Xiaomi API ($MIMO_BASE_URL)"
-else
+if [[ "$OPENROUTER_MODE" == true ]]; then
     echo "  Routing:  OpenRouter"
+else
+    echo "  Routing:  Direct Xiaomi API ($MIMO_BASE_URL)"
 fi
 echo ""
 
