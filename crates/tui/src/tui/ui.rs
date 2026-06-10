@@ -3340,7 +3340,12 @@ async fn run_event_loop(
                 && key.modifiers.contains(KeyModifiers::CONTROL)
                 && app.view_stack.is_empty()
             {
-                open_shell_control(app);
+                // #3032: Ctrl+B directly backgrounds the active foreground
+                // shell command instead of opening a two-step shell-control
+                // menu.  When nothing is backgroundable, the status message
+                // tells the user what's going on.
+                request_foreground_shell_background(app);
+                app.needs_redraw = true;
                 continue;
             }
 
