@@ -374,12 +374,18 @@ fn read_pdf_via_pdf_extract(
             }
         }
     } else {
-        pdf_extract::extract_text(path).map_err(|e| {
-            ToolError::execution_failed(format!(
-                "pdf-extract failed on {}: {e} (set `prefer_external_pdftotext = true` in settings.toml to retry via pdftotext)",
-                path.display()
-            ))
-        })?
+        // Call extract_text_by_pages even when the caller wants every page:
+        // extract_text uses an internal codepath that can hang on certain PDF
+        // cross-reference tables or font encodings (#2641). The per-page path
+        // avoids that hang and produces identical output when joined.
+        pdf_extract::extract_text_by_pages(path)
+            .map(|pages| pages.join("\n"))
+            .map_err(|e| {
+                ToolError::execution_failed(format!(
+                    "pdf-extract failed on {}: {e} (set `prefer_external_pdftotext = true` in settings.toml to retry via pdftotext)",
+                    path.display()
+                ))
+            })?
     };
     Ok(ToolResult::success(clean_pdf_text(&text)))
 }
