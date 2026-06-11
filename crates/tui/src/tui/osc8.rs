@@ -28,7 +28,6 @@ const OSC8_CLOSE: &str = "\x1b]8;;\x1b\\";
 pub struct LinkRegion {
     pub row: u16,
     pub col_start: u16,
-    #[allow(dead_code)] // used by future buffer-scan link detection
     pub col_end: u16,
     pub target: String,
 }
