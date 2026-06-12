@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SiliconFlow China provider config (#2893/#2895).** `siliconflow-CN`
+  now reads its own `[providers.siliconflow_cn]` / `[providers.siliconflow-CN]`
+  table and falls back to `[providers.siliconflow]` only for unset
+  `api_key`/`base_url`/`model` fields. Thanks @Artenx for the report and
+  @idling11 for the PR.
 - **TUI mouse-report leak (#3063/#3067).** Strip raw SGR mouse coordinate
   tails from the composer even when `use_mouse_capture` is false, covering
   orphaned terminal reporting state after crashes or focus races.

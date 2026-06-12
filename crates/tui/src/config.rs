@@ -2012,6 +2012,8 @@ pub struct ProvidersConfig {
     pub fireworks: ProviderConfig,
     #[serde(default)]
     pub siliconflow: ProviderConfig,
+    #[serde(default, alias = "siliconflow-CN", alias = "siliconflow-cn")]
+    pub siliconflow_cn: ProviderConfig,
     #[serde(default)]
     pub arcee: ProviderConfig,
     #[serde(default)]
@@ -2184,7 +2186,8 @@ impl Config {
             ApiProvider::XiaomiMimo => "providers.xiaomi_mimo",
             ApiProvider::Novita => "providers.novita",
             ApiProvider::Fireworks => "providers.fireworks",
-            ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => "providers.siliconflow",
+            ApiProvider::Siliconflow => "providers.siliconflow",
+            ApiProvider::SiliconflowCn => "providers.siliconflow_cn",
             ApiProvider::Arcee => "providers.arcee",
             ApiProvider::Moonshot => "providers.moonshot",
             ApiProvider::Sglang => "providers.sglang",
@@ -2335,7 +2338,8 @@ impl Config {
             ApiProvider::XiaomiMimo => &providers.xiaomi_mimo,
             ApiProvider::Novita => &providers.novita,
             ApiProvider::Fireworks => &providers.fireworks,
-            ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &providers.siliconflow,
+            ApiProvider::Siliconflow => &providers.siliconflow,
+            ApiProvider::SiliconflowCn => &providers.siliconflow_cn,
             ApiProvider::Arcee => &providers.arcee,
             ApiProvider::Moonshot => &providers.moonshot,
             ApiProvider::Sglang => &providers.sglang,
@@ -2362,7 +2366,8 @@ impl Config {
             ApiProvider::XiaomiMimo => &mut providers.xiaomi_mimo,
             ApiProvider::Novita => &mut providers.novita,
             ApiProvider::Fireworks => &mut providers.fireworks,
-            ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &mut providers.siliconflow,
+            ApiProvider::Siliconflow => &mut providers.siliconflow,
+            ApiProvider::SiliconflowCn => &mut providers.siliconflow_cn,
             ApiProvider::Arcee => &mut providers.arcee,
             ApiProvider::Moonshot => &mut providers.moonshot,
             ApiProvider::Sglang => &mut providers.sglang,
@@ -2378,6 +2383,28 @@ impl Config {
 
     pub(crate) fn provider_config(&self) -> Option<&ProviderConfig> {
         self.provider_config_for(self.api_provider())
+    }
+
+    fn provider_config_string_with_runtime_fallback<F>(
+        &self,
+        provider: ApiProvider,
+        get: F,
+    ) -> Option<String>
+    where
+        F: Fn(&ProviderConfig) -> Option<String>,
+    {
+        if let Some(value) = self
+            .provider_config_for(provider)
+            .and_then(|entry| get(entry))
+        {
+            return Some(value);
+        }
+        if provider == ApiProvider::SiliconflowCn {
+            return self
+                .provider_config_for(ApiProvider::Siliconflow)
+                .and_then(|entry| get(entry));
+        }
+        None
     }
 
     #[must_use]
@@ -2403,14 +2430,14 @@ impl Config {
     #[must_use]
     pub fn default_model(&self) -> String {
         let provider = self.api_provider();
-        if let Some(model) = self
-            .provider_config()
-            .and_then(|provider| provider.model.as_deref())
+        if let Some(model) =
+            self.provider_config_string_with_runtime_fallback(provider, |entry| entry.model.clone())
         {
+            let model = model.trim();
             if provider_passes_model_through(provider)
                 || self.active_provider_preserves_custom_base_url_model()
             {
-                return model.trim().to_string();
+                return model.to_string();
             }
             if let Some(normalized) = normalize_model_for_provider(provider, model) {
                 return normalized;
@@ -2421,9 +2448,8 @@ impl Config {
             // It must pass through verbatim rather than fall back to a
             // DeepSeek/provider default (issue #1714).
             if !matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN) {
-                let trimmed = model.trim();
-                if !trimmed.is_empty() {
-                    return trimmed.to_string();
+                if !model.is_empty() {
+                    return model.to_string();
                 }
             }
         }
@@ -2506,8 +2532,7 @@ impl Config {
     pub fn deepseek_base_url(&self) -> String {
         let provider = self.api_provider();
         let provider_base = self
-            .provider_config_for(provider)
-            .and_then(|provider| provider.base_url.clone());
+            .provider_config_string_with_runtime_fallback(provider, |entry| entry.base_url.clone());
         // Root `base_url` is the legacy DeepSeek field; only NvidiaNim has a
         // back-compat sniff (integrate.api.nvidia.com). OpenRouter / Novita
         // were added in v0.6.7 and require explicit `[providers.<name>]`
@@ -2682,8 +2707,7 @@ impl Config {
         // 1. Config file (provider-scoped slot). This intentionally wins
         // over ambient env so `codewhale auth set` fixes stale shell exports.
         if let Some(configured) = self
-            .provider_config_for(provider)
-            .and_then(|provider| provider.api_key.clone())
+            .provider_config_string_with_runtime_fallback(provider, |entry| entry.api_key.clone())
             && !configured.trim().is_empty()
         {
             return Ok(configured);
@@ -2779,9 +2803,14 @@ impl Config {
                 "Fireworks AI API key not found. Run 'codewhale auth set --provider fireworks', \
                  set FIREWORKS_API_KEY, or add [providers.fireworks] api_key in ~/.codewhale/config.toml."
             ),
-            ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => anyhow::bail!(
+            ApiProvider::Siliconflow => anyhow::bail!(
                 "SiliconFlow API key not found. Run 'codewhale auth set --provider siliconflow', \
                  set SILICONFLOW_API_KEY, or add [providers.siliconflow] api_key in ~/.codewhale/config.toml."
+            ),
+            ApiProvider::SiliconflowCn => anyhow::bail!(
+                "SiliconFlow China API key not found. Run 'codewhale auth set --provider siliconflow-CN', \
+                 set SILICONFLOW_API_KEY, or add [providers.siliconflow_cn] api_key in ~/.codewhale/config.toml. \
+                 [providers.siliconflow] remains a fallback when the CN table omits api_key."
             ),
             ApiProvider::Arcee => anyhow::bail!(
                 "Arcee AI API key not found. Run 'codewhale auth set --provider arcee', \
@@ -3573,11 +3602,18 @@ fn apply_env_overrides(config: &mut Config) {
                     .fireworks
                     .base_url = Some(value);
             }
-            ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => {
+            ApiProvider::Siliconflow => {
                 config
                     .providers
                     .get_or_insert_with(ProvidersConfig::default)
                     .siliconflow
+                    .base_url = Some(value);
+            }
+            ApiProvider::SiliconflowCn => {
+                config
+                    .providers
+                    .get_or_insert_with(ProvidersConfig::default)
+                    .siliconflow_cn
                     .base_url = Some(value);
             }
             ApiProvider::Arcee => {
@@ -3761,17 +3797,14 @@ fn apply_env_overrides(config: &mut Config) {
             .fireworks
             .base_url = Some(value);
     }
+    let active_provider = config.api_provider();
     if matches!(
-        config.api_provider(),
+        active_provider,
         ApiProvider::Siliconflow | ApiProvider::SiliconflowCn
     ) && let Ok(value) = std::env::var("SILICONFLOW_BASE_URL")
         && !value.trim().is_empty()
     {
-        config
-            .providers
-            .get_or_insert_with(ProvidersConfig::default)
-            .siliconflow
-            .base_url = Some(value);
+        config.provider_config_for_mut(active_provider).base_url = Some(value);
     }
     if matches!(config.api_provider(), ApiProvider::Arcee)
         && let Ok(value) = std::env::var("ARCEE_BASE_URL")
@@ -3848,7 +3881,8 @@ fn apply_env_overrides(config: &mut Config) {
             ApiProvider::XiaomiMimo => &mut providers.xiaomi_mimo,
             ApiProvider::Novita => &mut providers.novita,
             ApiProvider::Fireworks => &mut providers.fireworks,
-            ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &mut providers.siliconflow,
+            ApiProvider::Siliconflow => &mut providers.siliconflow,
+            ApiProvider::SiliconflowCn => &mut providers.siliconflow_cn,
             ApiProvider::Arcee => &mut providers.arcee,
             ApiProvider::Moonshot => &mut providers.moonshot,
             ApiProvider::Sglang => &mut providers.sglang,
@@ -3978,17 +4012,14 @@ fn apply_env_overrides(config: &mut Config) {
             .moonshot
             .model = Some(value);
     }
+    let active_provider = config.api_provider();
     if matches!(
-        config.api_provider(),
+        active_provider,
         ApiProvider::Siliconflow | ApiProvider::SiliconflowCn
     ) && let Ok(value) = std::env::var("SILICONFLOW_MODEL")
         && !value.trim().is_empty()
     {
-        config
-            .providers
-            .get_or_insert_with(ProvidersConfig::default)
-            .siliconflow
-            .model = Some(value);
+        config.provider_config_for_mut(active_provider).model = Some(value);
     }
     if matches!(config.api_provider(), ApiProvider::Arcee)
         && let Ok(value) = std::env::var("ARCEE_MODEL")
@@ -4045,7 +4076,8 @@ fn apply_env_overrides(config: &mut Config) {
                 ApiProvider::XiaomiMimo => &mut providers.xiaomi_mimo,
                 ApiProvider::Novita => &mut providers.novita,
                 ApiProvider::Fireworks => &mut providers.fireworks,
-                ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &mut providers.siliconflow,
+                ApiProvider::Siliconflow => &mut providers.siliconflow,
+                ApiProvider::SiliconflowCn => &mut providers.siliconflow_cn,
                 ApiProvider::Arcee => &mut providers.arcee,
                 ApiProvider::Moonshot => &mut providers.moonshot,
                 ApiProvider::Sglang => &mut providers.sglang,
@@ -4302,6 +4334,16 @@ fn normalize_model_config(config: &mut Config) {
             && let Some(normalized) = normalize_model_for_provider(ApiProvider::Siliconflow, model)
         {
             providers.siliconflow.model = Some(normalized);
+        }
+        if let Some(model) = providers.siliconflow_cn.model.as_deref()
+            && !provider_entry_uses_custom_base_url(
+                ApiProvider::SiliconflowCn,
+                &providers.siliconflow_cn,
+            )
+            && let Some(normalized) =
+                normalize_model_for_provider(ApiProvider::SiliconflowCn, model)
+        {
+            providers.siliconflow_cn.model = Some(normalized);
         }
         if let Some(model) = providers.moonshot.model.as_deref()
             && !provider_entry_uses_custom_base_url(ApiProvider::Moonshot, &providers.moonshot)
@@ -4796,6 +4838,7 @@ fn merge_providers(
             novita: merge_provider_config(base.novita, override_cfg.novita),
             fireworks: merge_provider_config(base.fireworks, override_cfg.fireworks),
             siliconflow: merge_provider_config(base.siliconflow, override_cfg.siliconflow),
+            siliconflow_cn: merge_provider_config(base.siliconflow_cn, override_cfg.siliconflow_cn),
             arcee: merge_provider_config(base.arcee, override_cfg.arcee),
             moonshot: merge_provider_config(base.moonshot, override_cfg.moonshot),
             sglang: merge_provider_config(base.sglang, override_cfg.sglang),
@@ -5232,8 +5275,7 @@ pub fn active_provider_has_config_api_key(config: &Config) -> bool {
     }
 
     if config
-        .provider_config_for(provider)
-        .and_then(|entry| entry.api_key.as_ref())
+        .provider_config_string_with_runtime_fallback(provider, |entry| entry.api_key.clone())
         .is_some_and(|k| !k.trim().is_empty() && k != API_KEYRING_SENTINEL)
     {
         return true;
@@ -5408,8 +5450,7 @@ pub fn has_api_key_for(config: &Config, provider: ApiProvider) -> bool {
     }
 
     if config
-        .provider_config_for(provider)
-        .and_then(|entry| entry.api_key.as_ref())
+        .provider_config_string_with_runtime_fallback(provider, |entry| entry.api_key.clone())
         .is_some_and(|k| !k.trim().is_empty() && k != API_KEYRING_SENTINEL)
     {
         return true;
@@ -5458,7 +5499,8 @@ pub fn save_api_key_for(provider: ApiProvider, api_key: &str) -> Result<PathBuf>
         ApiProvider::XiaomiMimo => "providers.xiaomi_mimo",
         ApiProvider::Novita => "providers.novita",
         ApiProvider::Fireworks => "providers.fireworks",
-        ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => "providers.siliconflow",
+        ApiProvider::Siliconflow => "providers.siliconflow",
+        ApiProvider::SiliconflowCn => "providers.siliconflow_cn",
         ApiProvider::Arcee => "providers.arcee",
         ApiProvider::Huggingface => "providers.huggingface",
         ApiProvider::Moonshot => "providers.moonshot",
@@ -5504,7 +5546,7 @@ pub fn save_api_key_for(provider: ApiProvider, api_key: &str) -> Result<PathBuf>
         ApiProvider::Novita => "novita",
         ApiProvider::Fireworks => "fireworks",
         ApiProvider::Siliconflow => "siliconflow",
-        ApiProvider::SiliconflowCn => "siliconflow",
+        ApiProvider::SiliconflowCn => "siliconflow_cn",
         ApiProvider::Arcee => "arcee",
         ApiProvider::Huggingface => "huggingface",
         ApiProvider::Moonshot => "moonshot",
@@ -5603,7 +5645,7 @@ fn provider_config_key(provider: ApiProvider) -> Result<&'static str> {
         ApiProvider::Novita => Ok("novita"),
         ApiProvider::Fireworks => Ok("fireworks"),
         ApiProvider::Siliconflow => Ok("siliconflow"),
-        ApiProvider::SiliconflowCn => Ok("siliconflow"),
+        ApiProvider::SiliconflowCn => Ok("siliconflow_cn"),
         ApiProvider::Arcee => Ok("arcee"),
         ApiProvider::Huggingface => Ok("huggingface"),
         ApiProvider::Moonshot => Ok("moonshot"),
@@ -9971,6 +10013,138 @@ model = "deepseek-v4-flash"
     }
 
     #[test]
+    fn siliconflow_cn_reads_hyphenated_provider_table_from_config_file() -> Result<()> {
+        let _lock = lock_test_env();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_root = env::temp_dir().join(format!(
+            "codewhale-tui-siliconflow-cn-table-{}-{}",
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(&temp_root)?;
+        let _guard = EnvGuard::new(&temp_root);
+
+        let config_path = temp_root.join(".deepseek").join("config.toml");
+        ensure_parent_dir(&config_path)?;
+        fs::write(
+            &config_path,
+            r#"provider = "siliconflow-CN"
+
+[providers.siliconflow-CN]
+api_key = "sf-cn-table-key"
+base_url = "https://api.siliconflow.cn/v1"
+model = "deepseek-reasoner"
+"#,
+        )?;
+
+        let config = Config::load(None, None)?;
+        assert_eq!(config.api_provider(), ApiProvider::SiliconflowCn);
+        assert_eq!(config.deepseek_api_key()?, "sf-cn-table-key");
+        assert_eq!(config.deepseek_base_url(), DEFAULT_SILICONFLOW_CN_BASE_URL);
+        assert_eq!(config.default_model(), DEFAULT_SILICONFLOW_MODEL);
+        assert!(has_api_key_for(&config, ApiProvider::SiliconflowCn));
+        Ok(())
+    }
+
+    #[test]
+    fn siliconflow_cn_falls_back_to_shared_siliconflow_table_when_unset() -> Result<()> {
+        let _lock = lock_test_env();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_root = env::temp_dir().join(format!(
+            "codewhale-tui-siliconflow-cn-fallback-{}-{}",
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(&temp_root)?;
+        let _guard = EnvGuard::new(&temp_root);
+
+        let config_path = temp_root.join(".deepseek").join("config.toml");
+        ensure_parent_dir(&config_path)?;
+        fs::write(
+            &config_path,
+            r#"provider = "siliconflow-CN"
+
+[providers.siliconflow]
+api_key = "sf-shared-key"
+base_url = "https://api.siliconflow.com/v1"
+model = "deepseek-chat"
+
+[providers.siliconflow_cn]
+base_url = "https://api.siliconflow.cn/v1"
+"#,
+        )?;
+
+        let config = Config::load(None, None)?;
+        assert_eq!(config.api_provider(), ApiProvider::SiliconflowCn);
+        assert_eq!(config.deepseek_api_key()?, "sf-shared-key");
+        assert_eq!(config.deepseek_base_url(), DEFAULT_SILICONFLOW_CN_BASE_URL);
+        assert_eq!(config.default_model(), DEFAULT_SILICONFLOW_FLASH_MODEL);
+        assert!(active_provider_has_config_api_key(&config));
+        Ok(())
+    }
+
+    #[test]
+    fn siliconflow_cn_env_overrides_write_cn_table_only() -> Result<()> {
+        let _lock = lock_test_env();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_root = env::temp_dir().join(format!(
+            "codewhale-tui-siliconflow-cn-env-table-{}-{}",
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(&temp_root)?;
+        let _guard = EnvGuard::new(&temp_root);
+
+        let config_path = temp_root.join(".deepseek").join("config.toml");
+        ensure_parent_dir(&config_path)?;
+        fs::write(
+            &config_path,
+            r#"provider = "siliconflow-CN"
+
+[providers.siliconflow]
+api_key = "sf-shared-key"
+base_url = "https://api.siliconflow.com/v1"
+model = "deepseek-reasoner"
+"#,
+        )?;
+        unsafe {
+            env::set_var("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1");
+            env::set_var("SILICONFLOW_MODEL", "deepseek-chat");
+        }
+
+        let config = Config::load(None, None)?;
+        let providers = config.providers.as_ref().expect("providers");
+        assert_eq!(
+            providers.siliconflow.base_url.as_deref(),
+            Some(DEFAULT_SILICONFLOW_BASE_URL)
+        );
+        assert_eq!(
+            providers.siliconflow.model.as_deref(),
+            Some(DEFAULT_SILICONFLOW_MODEL)
+        );
+        assert_eq!(
+            providers.siliconflow_cn.base_url.as_deref(),
+            Some(DEFAULT_SILICONFLOW_CN_BASE_URL)
+        );
+        assert_eq!(
+            providers.siliconflow_cn.model.as_deref(),
+            Some(DEFAULT_SILICONFLOW_FLASH_MODEL)
+        );
+        assert_eq!(config.deepseek_api_key()?, "sf-shared-key");
+        assert_eq!(config.default_model(), DEFAULT_SILICONFLOW_FLASH_MODEL);
+        Ok(())
+    }
+
+    #[test]
     fn openrouter_custom_base_url_preserves_provider_model() -> Result<()> {
         let _lock = lock_test_env();
         let nanos = SystemTime::now()
@@ -10549,16 +10723,18 @@ api_key = "moonshot-platform-key"
         assert_eq!(
             parsed
                 .get("providers")
-                .and_then(|p| p.get("siliconflow"))
+                .and_then(|p| p.get("siliconflow_cn"))
                 .and_then(|t| t.get("api_key"))
                 .and_then(toml::Value::as_str),
             Some("sf-cn-saved-key")
         );
-        assert!(
+        assert_eq!(
             parsed
                 .get("providers")
-                .and_then(|p| p.get("siliconflow-CN"))
-                .is_none()
+                .and_then(|p| p.get("siliconflow"))
+                .and_then(|t| t.get("api_key"))
+                .and_then(toml::Value::as_str),
+            Some("sf-saved-key")
         );
         Ok(())
     }

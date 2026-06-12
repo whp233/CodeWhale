@@ -296,6 +296,8 @@ pub struct ProvidersToml {
     pub fireworks: ProviderConfigToml,
     #[serde(default)]
     pub siliconflow: ProviderConfigToml,
+    #[serde(default, alias = "siliconflow-CN", alias = "siliconflow-cn")]
+    pub siliconflow_cn: ProviderConfigToml,
     #[serde(default)]
     pub arcee: ProviderConfigToml,
     #[serde(default)]
@@ -361,7 +363,8 @@ impl ProvidersToml {
             ProviderKind::XiaomiMimo => &self.xiaomi_mimo,
             ProviderKind::Novita => &self.novita,
             ProviderKind::Fireworks => &self.fireworks,
-            ProviderKind::Siliconflow | ProviderKind::SiliconflowCN => &self.siliconflow,
+            ProviderKind::Siliconflow => &self.siliconflow,
+            ProviderKind::SiliconflowCN => &self.siliconflow_cn,
             ProviderKind::Arcee => &self.arcee,
             ProviderKind::Moonshot => &self.moonshot,
             ProviderKind::Sglang => &self.sglang,
@@ -386,7 +389,8 @@ impl ProvidersToml {
             ProviderKind::XiaomiMimo => &mut self.xiaomi_mimo,
             ProviderKind::Novita => &mut self.novita,
             ProviderKind::Fireworks => &mut self.fireworks,
-            ProviderKind::Siliconflow | ProviderKind::SiliconflowCN => &mut self.siliconflow,
+            ProviderKind::Siliconflow => &mut self.siliconflow,
+            ProviderKind::SiliconflowCN => &mut self.siliconflow_cn,
             ProviderKind::Arcee => &mut self.arcee,
             ProviderKind::Moonshot => &mut self.moonshot,
             ProviderKind::Sglang => &mut self.sglang,
@@ -1121,6 +1125,10 @@ impl ConfigToml {
             &mut self.providers.siliconflow,
             &project.providers.siliconflow,
         );
+        merge_project_provider_config(
+            &mut self.providers.siliconflow_cn,
+            &project.providers.siliconflow_cn,
+        );
         merge_project_provider_config(&mut self.providers.arcee, &project.providers.arcee);
         merge_project_provider_config(&mut self.providers.moonshot, &project.providers.moonshot);
         merge_project_provider_config(&mut self.providers.sglang, &project.providers.sglang);
@@ -1219,6 +1227,12 @@ impl ConfigToml {
             "providers.siliconflow.model" => self.providers.siliconflow.model.clone(),
             "providers.siliconflow.http_headers" => {
                 serialize_http_headers(&self.providers.siliconflow.http_headers)
+            }
+            "providers.siliconflow_cn.api_key" => self.providers.siliconflow_cn.api_key.clone(),
+            "providers.siliconflow_cn.base_url" => self.providers.siliconflow_cn.base_url.clone(),
+            "providers.siliconflow_cn.model" => self.providers.siliconflow_cn.model.clone(),
+            "providers.siliconflow_cn.http_headers" => {
+                serialize_http_headers(&self.providers.siliconflow_cn.http_headers)
             }
             "providers.arcee.api_key" => self.providers.arcee.api_key.clone(),
             "providers.arcee.base_url" => self.providers.arcee.base_url.clone(),
@@ -1439,6 +1453,18 @@ impl ConfigToml {
             "providers.siliconflow.http_headers" => {
                 self.providers.siliconflow.http_headers = parse_http_headers(value)?;
             }
+            "providers.siliconflow_cn.api_key" => {
+                self.providers.siliconflow_cn.api_key = Some(value.to_string());
+            }
+            "providers.siliconflow_cn.base_url" => {
+                self.providers.siliconflow_cn.base_url = Some(value.to_string());
+            }
+            "providers.siliconflow_cn.model" => {
+                self.providers.siliconflow_cn.model = Some(value.to_string());
+            }
+            "providers.siliconflow_cn.http_headers" => {
+                self.providers.siliconflow_cn.http_headers = parse_http_headers(value)?;
+            }
             "providers.arcee.api_key" => {
                 self.providers.arcee.api_key = Some(value.to_string());
             }
@@ -1617,6 +1643,12 @@ impl ConfigToml {
             "providers.siliconflow.model" => self.providers.siliconflow.model = None,
             "providers.siliconflow.http_headers" => {
                 self.providers.siliconflow.http_headers.clear();
+            }
+            "providers.siliconflow_cn.api_key" => self.providers.siliconflow_cn.api_key = None,
+            "providers.siliconflow_cn.base_url" => self.providers.siliconflow_cn.base_url = None,
+            "providers.siliconflow_cn.model" => self.providers.siliconflow_cn.model = None,
+            "providers.siliconflow_cn.http_headers" => {
+                self.providers.siliconflow_cn.http_headers.clear();
             }
             "providers.arcee.api_key" => self.providers.arcee.api_key = None,
             "providers.arcee.base_url" => self.providers.arcee.base_url = None,
@@ -1845,6 +1877,21 @@ impl ConfigToml {
         if let Some(v) = serialize_http_headers(&self.providers.siliconflow.http_headers) {
             out.insert("providers.siliconflow.http_headers".to_string(), v);
         }
+        if let Some(v) = self.providers.siliconflow_cn.api_key.as_ref() {
+            out.insert(
+                "providers.siliconflow_cn.api_key".to_string(),
+                redact_secret(v),
+            );
+        }
+        if let Some(v) = self.providers.siliconflow_cn.base_url.as_ref() {
+            out.insert("providers.siliconflow_cn.base_url".to_string(), v.clone());
+        }
+        if let Some(v) = self.providers.siliconflow_cn.model.as_ref() {
+            out.insert("providers.siliconflow_cn.model".to_string(), v.clone());
+        }
+        if let Some(v) = serialize_http_headers(&self.providers.siliconflow_cn.http_headers) {
+            out.insert("providers.siliconflow_cn.http_headers".to_string(), v);
+        }
         if let Some(v) = self.providers.arcee.api_key.as_ref() {
             out.insert("providers.arcee.api_key".to_string(), redact_secret(v));
         }
@@ -1956,7 +2003,19 @@ impl ConfigToml {
         let env = EnvRuntimeOverrides::load();
         let provider = cli.provider.or(env.provider).unwrap_or(self.provider);
 
-        let provider_cfg = self.providers.for_provider(provider);
+        let mut provider_cfg = self.providers.for_provider(provider).clone();
+        if provider == ProviderKind::SiliconflowCN {
+            let fb = &self.providers.siliconflow;
+            if provider_cfg.api_key.is_none() {
+                provider_cfg.api_key = fb.api_key.clone();
+            }
+            if provider_cfg.base_url.is_none() {
+                provider_cfg.base_url = fb.base_url.clone();
+            }
+            if provider_cfg.model.is_none() {
+                provider_cfg.model = fb.model.clone();
+            }
+        }
         let root_deepseek_api_key = (provider == ProviderKind::Deepseek)
             .then(|| self.api_key.clone())
             .flatten();
@@ -2284,11 +2343,11 @@ fn normalize_model_for_provider(provider: ProviderKind, model: &str) -> String {
             DEFAULT_FIREWORKS_MODEL.to_string()
         }
         (
-            ProviderKind::Siliconflow,
+            ProviderKind::Siliconflow | ProviderKind::SiliconflowCN,
             "deepseek-v4-pro" | "deepseek-v4pro" | "deepseek-reasoner" | "deepseek-r1",
         ) => DEFAULT_SILICONFLOW_MODEL.to_string(),
         (
-            ProviderKind::Siliconflow,
+            ProviderKind::Siliconflow | ProviderKind::SiliconflowCN,
             "deepseek-v4-flash" | "deepseek-v4flash" | "deepseek-chat" | "deepseek-v3",
         ) => DEFAULT_SILICONFLOW_FLASH_MODEL.to_string(),
         (
@@ -4633,6 +4692,59 @@ unix_socket_path = "/tmp/cw-hooks.sock"
     }
 
     #[test]
+    fn siliconflow_cn_provider_config_values_round_trip() -> Result<()> {
+        let mut config = ConfigToml::default();
+
+        config.set_value("providers.siliconflow_cn.api_key", "sf-cn-secret-value")?;
+        config.set_value(
+            "providers.siliconflow_cn.base_url",
+            DEFAULT_SILICONFLOW_CN_BASE_URL,
+        )?;
+        config.set_value("providers.siliconflow_cn.model", DEFAULT_SILICONFLOW_MODEL)?;
+        config.set_value("providers.siliconflow_cn.http_headers", "X-Test=ok")?;
+
+        assert_eq!(
+            config
+                .get_display_value("providers.siliconflow_cn.api_key")
+                .as_deref(),
+            Some("sf-c***alue")
+        );
+        assert_eq!(
+            config
+                .get_value("providers.siliconflow_cn.base_url")
+                .as_deref(),
+            Some(DEFAULT_SILICONFLOW_CN_BASE_URL)
+        );
+        assert_eq!(
+            config
+                .get_value("providers.siliconflow_cn.model")
+                .as_deref(),
+            Some(DEFAULT_SILICONFLOW_MODEL)
+        );
+        assert_eq!(
+            config
+                .list_values()
+                .get("providers.siliconflow_cn.api_key")
+                .map(String::as_str),
+            Some("sf-c***alue")
+        );
+
+        config.unset_value("providers.siliconflow_cn.api_key")?;
+        config.unset_value("providers.siliconflow_cn.base_url")?;
+        config.unset_value("providers.siliconflow_cn.model")?;
+        config.unset_value("providers.siliconflow_cn.http_headers")?;
+
+        assert_eq!(config.get_value("providers.siliconflow_cn.api_key"), None);
+        assert_eq!(config.get_value("providers.siliconflow_cn.base_url"), None);
+        assert_eq!(config.get_value("providers.siliconflow_cn.model"), None);
+        assert_eq!(
+            config.get_value("providers.siliconflow_cn.http_headers"),
+            None
+        );
+        Ok(())
+    }
+
+    #[test]
     fn volcengine_provider_config_values_round_trip() -> Result<()> {
         let mut config = ConfigToml::default();
 
@@ -5135,11 +5247,11 @@ unix_socket_path = "/tmp/cw-hooks.sock"
             provider::resolve_provider("siliconflow-cn").expect("siliconflow-cn alias resolves");
         assert_eq!(siliconflow_cn.kind(), ProviderKind::SiliconflowCN);
         assert_eq!(siliconflow_cn.id(), "siliconflow-CN");
-        assert_eq!(siliconflow_cn.provider_config_key(), "siliconflow");
+        assert_eq!(siliconflow_cn.provider_config_key(), "siliconflow_cn");
 
         let config = ProvidersToml::default();
         let shared_table = config.for_provider(ProviderKind::SiliconflowCN);
-        assert!(std::ptr::eq(
+        assert!(!std::ptr::eq(
             shared_table,
             config.for_provider(ProviderKind::Siliconflow)
         ));
@@ -5361,6 +5473,28 @@ mode = "token-plan-usa"
         assert_eq!(resolved.provider, ProviderKind::Siliconflow);
         assert_eq!(resolved.base_url, DEFAULT_SILICONFLOW_BASE_URL);
         assert_eq!(resolved.model, DEFAULT_SILICONFLOW_MODEL);
+    }
+
+    #[test]
+    fn siliconflow_cn_config_falls_back_to_shared_table_when_unset() {
+        let _lock = env_lock();
+        let _env = EnvGuard::without_deepseek_runtime_overrides();
+        let mut config = ConfigToml {
+            provider: ProviderKind::SiliconflowCN,
+            ..ConfigToml::default()
+        };
+        config.providers.siliconflow.api_key = Some("sf-shared-key".to_string());
+        config.providers.siliconflow.base_url = Some(DEFAULT_SILICONFLOW_BASE_URL.to_string());
+        config.providers.siliconflow.model = Some("deepseek-chat".to_string());
+        config.providers.siliconflow_cn.base_url =
+            Some(DEFAULT_SILICONFLOW_CN_BASE_URL.to_string());
+
+        let resolved = config.resolve_runtime_options(&CliRuntimeOverrides::default());
+
+        assert_eq!(resolved.provider, ProviderKind::SiliconflowCN);
+        assert_eq!(resolved.api_key.as_deref(), Some("sf-shared-key"));
+        assert_eq!(resolved.base_url, DEFAULT_SILICONFLOW_CN_BASE_URL);
+        assert_eq!(resolved.model, DEFAULT_SILICONFLOW_FLASH_MODEL);
     }
 
     #[test]
