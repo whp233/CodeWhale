@@ -159,6 +159,79 @@ pub enum ProviderKind {
 }
 
 impl ProviderKind {
+    #[must_use]
+    pub fn is_tui_capable(self) -> bool {
+        matches!(
+            self,
+            Self::Deepseek
+                | Self::NvidiaNim
+                | Self::Openai
+                | Self::Atlascloud
+                | Self::WanjieArk
+                | Self::Volcengine
+                | Self::Openrouter
+                | Self::XiaomiMimo
+                | Self::Novita
+                | Self::Fireworks
+                | Self::Siliconflow
+                | Self::SiliconflowCN
+                | Self::Arcee
+                | Self::Moonshot
+                | Self::Sglang
+                | Self::Vllm
+                | Self::Ollama
+                | Self::Huggingface
+                | Self::Together
+                | Self::OpenaiCodex
+        )
+    }
+
+    #[must_use]
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Deepseek => "DeepSeek",
+            Self::NvidiaNim => "NVIDIA NIM",
+            Self::Openai => "OpenAI-compatible",
+            Self::Atlascloud => "AtlasCloud",
+            Self::WanjieArk => "Wanjie Ark",
+            Self::Volcengine => "Volcengine Ark",
+            Self::Openrouter => "OpenRouter",
+            Self::XiaomiMimo => "Xiaomi MiMo",
+            Self::Novita => "Novita",
+            Self::Fireworks => "Fireworks",
+            Self::Siliconflow => "SiliconFlow",
+            Self::SiliconflowCN => "SiliconFlow (CN)",
+            Self::Arcee => "Arcee AI",
+            Self::Moonshot => "Moonshot/Kimi",
+            Self::Sglang => "SGLang",
+            Self::Vllm => "vLLM",
+            Self::Ollama => "Ollama",
+            Self::Huggingface => "Hugging Face",
+            Self::Together => "Together AI",
+            Self::OpenaiCodex => "OpenAI Codex",
+            Self::Anthropic => "Anthropic",
+        }
+    }
+
+    #[must_use]
+    pub fn tui_supported_providers_msg() -> String {
+        let mut names = Vec::new();
+        for p in Self::ALL {
+            if p.is_tui_capable() {
+                names.push(p.display_name());
+            }
+        }
+        match names.as_slice() {
+            [] => String::new(),
+            [only] => (*only).to_string(),
+            [first, second] => format!("{first} and {second}"),
+            _ => {
+                let last = names.pop().expect("non-empty");
+                format!("{}, and {}", names.join(", "), last)
+            }
+        }
+    }
+
     pub const ALL: [Self; 21] = [
         Self::Deepseek,
         Self::NvidiaNim,
@@ -1968,7 +2041,18 @@ impl ConfigToml {
         secrets: &Secrets,
     ) -> ResolvedRuntimeOptions {
         let env = EnvRuntimeOverrides::load();
-        let provider = cli.provider.or(env.provider).unwrap_or(self.provider);
+        let (provider, provider_source) = if let Some(p) = cli.provider {
+            (p, ProviderSource::Cli)
+        } else if let Some(p) = env.provider {
+            let var_name = if std::env::var("CODEWHALE_PROVIDER").is_ok() {
+                "CODEWHALE_PROVIDER"
+            } else {
+                "DEEPSEEK_PROVIDER"
+            };
+            (p, ProviderSource::Env(var_name))
+        } else {
+            (self.provider, ProviderSource::Config)
+        };
 
         let mut provider_cfg = self.providers.for_provider(provider).clone();
         if provider == ProviderKind::SiliconflowCN {
@@ -2168,6 +2252,7 @@ impl ConfigToml {
 
         ResolvedRuntimeOptions {
             provider,
+            provider_source,
             model,
             api_key,
             api_key_source,
@@ -2809,9 +2894,17 @@ impl RuntimeApiKeySource {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderSource {
+    Cli,
+    Env(&'static str),
+    Config,
+}
+
 #[derive(Debug, Clone)]
 pub struct ResolvedRuntimeOptions {
     pub provider: ProviderKind,
+    pub provider_source: ProviderSource,
     pub model: String,
     pub api_key: Option<String>,
     pub api_key_source: Option<RuntimeApiKeySource>,
