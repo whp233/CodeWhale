@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.61] - 2026-06-14
+
+### Added
+
+- Initial v0.8.61 integration branch. Changes will be listed as they land.
+
+### Changed
+
+### Fixed
+
 ## [0.8.60] - 2026-06-13
 
 ### Added
@@ -1328,37 +1338,6 @@ screenshots, logs, or retest requests shaped this release: **@buko** (#2359,
 **@Neo-millunnium**, **@caeserchen**, **@T-Phuong-Nguyen**, **@zhyuzhyu**,
 **@0gl20shk0sbt36**, **@hatakes**, **@goodvecn-dev**, **@bevis-wong**,
 **@PurplePulse**, and **@nbiish**.
-
-## [0.8.47] - 2026-05-26
-
-### Added
-
-- **Closed-loop verification gate, runtime goal tools, DuckDuckGo default
-  web search, Xiaomi MiMo, global AGENTS.md fallback, `/new`, composer
-  selection, transcript copy cleanup, CNB mirror support, and Docker toolbox
-  docs** shipped in the published v0.8.47 release.
-
-### Changed
-
-- **DeepSeek-first release framing, project-context logging, state-root
-  migration, CodeWhale README paths, and reasoning-locale behavior** were
-  finalized for the v0.8.47 release.
-
-### Fixed
-
-- **Provider picker scrolling, auto model restore, cache-inspect hashing,
-  insecure LAN provider guard, large tool-output compaction, queued-message
-  ordering, shell/Yolo startup handling, Windows alt-screen logging, and
-  tooltip contrast** were fixed in the v0.8.47 release.
-
-### Community
-
-Thanks to contributors credited in the v0.8.47 GitHub Release, including
-**@Fire-dtx**, **@imkingjh999**, **@harvey2011888**, **@victorcheng2333**,
-**@IIzzaya**, **@PurplePulse**, **@cyq1017**, **@knqiufan**,
-**@Colorful-glassblock**, **@hongqitai**, **@EmiyaKiritsugu3**,
-**@aboimpinto**, **@HUQIANTAO**, **@mvanhorn**, **@LING71671**, and
-**@reidliu41**.
 
 ---
 

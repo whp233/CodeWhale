@@ -64,8 +64,8 @@ npm install -g codewhale
 # https://github.com/Hmbown/CodeWhale/releases
 
 # CNB 镜像（GitHub 难以访问时）
-cargo install --git https://cnb.cool/codewhale.net/codewhale --tag v0.8.60 codewhale-cli --locked --force
-cargo install --git https://cnb.cool/codewhale.net/codewhale --tag v0.8.60 codewhale-tui --locked --force
+cargo install --git https://cnb.cool/codewhale.net/codewhale --tag v0.8.61 codewhale-cli --locked --force
+cargo install --git https://cnb.cool/codewhale.net/codewhale --tag v0.8.61 codewhale-tui --locked --force
 
 # Homebrew（formula 改名期间的兼容方式）
 brew tap Hmbown/deepseek-tui && brew install deepseek-tui
