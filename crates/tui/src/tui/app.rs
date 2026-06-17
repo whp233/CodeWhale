@@ -2608,10 +2608,8 @@ impl App {
             self.plan_restore = Some(PlanRestoreState {
                 approval_mode: self.approval_mode,
             });
-        } else if leaving_plan {
-            if let Some(restore) = self.plan_restore.take() {
-                self.approval_mode = restore.approval_mode;
-            }
+        } else if leaving_plan && let Some(restore) = self.plan_restore.take() {
+            self.approval_mode = restore.approval_mode;
         }
 
         self.yolo = mode == AppMode::Yolo;
