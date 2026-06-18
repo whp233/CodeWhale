@@ -1403,12 +1403,13 @@ fn background_task_is_live(task: &TaskPanelEntry) -> bool {
 }
 
 const BRAILLE_SPINNER_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const BRAILLE_SPINNER_FRAME_MS: u64 = 100;
 
 fn background_task_spinner_prefix(task: &TaskPanelEntry) -> Option<&'static str> {
     if task.status != "running" {
         return None;
     }
-    let frame = task.duration_ms.unwrap_or_default() / 240;
+    let frame = task.duration_ms.unwrap_or_default() / BRAILLE_SPINNER_FRAME_MS;
     Some(BRAILLE_SPINNER_FRAMES[frame as usize % BRAILLE_SPINNER_FRAMES.len()])
 }
 
@@ -2996,14 +2997,15 @@ fn sidebar_hover_rows(
 mod tests {
     use super::{
         ACTIVE_TOOL_COMPLETED_ROW_TTL, ACTIVE_TOOL_STALE_RUNNING_ROW_TTL, AutoSidebarPanel,
-        AutoSidebarState, SidebarAgentRow, SidebarFocus, SidebarHoverRow, SidebarHoverSection,
-        SidebarHoverState, SidebarSubagentSummary, SidebarToolRow, SidebarWorkChecklistItem,
-        SidebarWorkStrategyStep, SidebarWorkSummary, ToolRowOrder, agent_row_hover_text,
-        auto_sidebar_panels, context_panel_cost_line, editorial_tool_rows, normalize_activity_text,
-        sidebar_agent_rows, sidebar_hover_rows, sidebar_work_summary,
-        sort_sidebar_agent_rows_as_tree, subagent_panel_hover_texts, subagent_panel_lines,
-        subagent_panel_rows, task_panel_hover_texts, task_panel_lines, task_panel_rows,
-        work_panel_empty_hint, work_panel_hover_texts, work_panel_lines,
+        AutoSidebarState, BRAILLE_SPINNER_FRAME_MS, SidebarAgentRow, SidebarFocus, SidebarHoverRow,
+        SidebarHoverSection, SidebarHoverState, SidebarSubagentSummary, SidebarToolRow,
+        SidebarWorkChecklistItem, SidebarWorkStrategyStep, SidebarWorkSummary, ToolRowOrder,
+        agent_row_hover_text, auto_sidebar_panels, background_task_spinner_prefix,
+        context_panel_cost_line, editorial_tool_rows, normalize_activity_text, sidebar_agent_rows,
+        sidebar_hover_rows, sidebar_work_summary, sort_sidebar_agent_rows_as_tree,
+        subagent_panel_hover_texts, subagent_panel_lines, subagent_panel_rows,
+        task_panel_hover_texts, task_panel_lines, task_panel_rows, work_panel_empty_hint,
+        work_panel_hover_texts, work_panel_lines,
     };
     use crate::config::Config;
     use crate::palette;
@@ -3884,6 +3886,27 @@ mod tests {
             text.iter().any(|line| line.contains("shell_33a08c3c")),
             "shell id should remain available as detail: {text:?}"
         );
+    }
+
+    #[test]
+    fn background_task_spinner_advances_at_readable_cadence() {
+        let mut task = TaskPanelEntry {
+            id: "shell_33a08c3c".to_string(),
+            status: "running".to_string(),
+            prompt_summary: "shell: cargo test".to_string(),
+            duration_ms: Some(0),
+            kind: TaskPanelEntryKind::Background,
+            stale: false,
+            elapsed_since_output_ms: None,
+        };
+
+        assert_eq!(background_task_spinner_prefix(&task), Some("⠋"));
+
+        task.duration_ms = Some(BRAILLE_SPINNER_FRAME_MS - 1);
+        assert_eq!(background_task_spinner_prefix(&task), Some("⠋"));
+
+        task.duration_ms = Some(BRAILLE_SPINNER_FRAME_MS);
+        assert_eq!(background_task_spinner_prefix(&task), Some("⠙"));
     }
 
     #[test]

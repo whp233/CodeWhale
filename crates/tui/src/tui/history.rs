@@ -31,8 +31,8 @@ const TOOL_RUNNING_SYMBOLS: [&str; 10] = [
     "\u{280B}", "\u{2819}", "\u{2839}", "\u{2838}", "\u{283C}", "\u{2834}", "\u{2826}", "\u{2827}",
     "\u{2807}", "\u{280F}",
 ];
-/// Per-glyph cadence: 200 ms — fast enough to feel alive, slow enough to read.
-const TOOL_STATUS_SYMBOL_MS: u64 = 200;
+/// Per-glyph cadence: 100 ms — visibly alive without exceeding the redraw cap.
+const TOOL_STATUS_SYMBOL_MS: u64 = 100;
 /// Visual marker for the user role at the start of their message line. Solid
 /// vertical bar — no animation; user input is a finished thing.
 const USER_GLYPH: &str = "\u{258E}"; // ▎
@@ -4665,8 +4665,8 @@ mod tests {
         // Use a 2× cycle offset so the animated frame lands on index 2,
         // which is maximally far from index 0. This avoids flaky failures on
         // platforms with coarse timer resolution (Windows ≈ 15.6 ms) and
-        // gives 3600 ms of headroom before the index could wrap back to 0
-        // (indices 2 → 3 → 0 requires two more full cycles).
+        // gives several frame intervals of headroom before the index could
+        // wrap back to 0.
         let started_at = Some(Instant::now() - Duration::from_millis(TOOL_STATUS_SYMBOL_MS * 2));
         let cell = HistoryCell::Tool(ToolCell::Exec(ExecCell {
             command: "echo hi".to_string(),
