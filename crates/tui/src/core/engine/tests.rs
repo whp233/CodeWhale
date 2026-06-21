@@ -2423,15 +2423,20 @@ fn internal_context_budget_tiers_reserved_output_by_window() {
 }
 
 #[test]
-fn v4_tool_outputs_keep_large_file_reads_in_context() {
+fn v4_keeps_large_file_reads_but_compacts_noisy_shell_output() {
     let content = "0123456789abcdef\n".repeat(2_000);
     let output = ToolResult::success(content.clone());
 
-    let v4_context = compact_tool_result_for_context("deepseek-v4-pro", "exec_shell", &output);
+    let v4_context = compact_tool_result_for_context("deepseek-v4-pro", "read_file", &output);
     assert_eq!(v4_context, content.trim());
 
+    let v4_shell_context =
+        compact_tool_result_for_context("deepseek-v4-pro", "exec_shell", &output);
+    assert!(v4_shell_context.contains("exec_shell output compacted to protect context"));
+    assert!(v4_shell_context.len() < v4_context.len());
+
     let legacy_context =
-        compact_tool_result_for_context("deepseek-v3.2-128k", "exec_shell", &output);
+        compact_tool_result_for_context("deepseek-v3.2-128k", "read_file", &output);
     assert!(legacy_context.contains("output compacted to protect context"));
     assert!(legacy_context.len() < v4_context.len());
 }
