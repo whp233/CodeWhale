@@ -3593,6 +3593,29 @@ async fn code_execution_runs_python_and_returns_result_payload() {
     assert!(result.content.contains("return_code"));
 }
 
+#[tokio::test]
+async fn code_execution_runs_through_common_executor_after_approval_gate() {
+    let tmp = tempdir().expect("tempdir");
+    let (tx_event, _rx_event) = mpsc::channel(8);
+    let result = Engine::execute_tool_with_lock(
+        Arc::new(RwLock::new(())),
+        false,
+        false,
+        tx_event,
+        CODE_EXECUTION_TOOL_NAME.to_string(),
+        json!({"code":"print('common executor code exec')"}),
+        tmp.path().to_path_buf(),
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("code_execution should run through common executor");
+
+    assert!(result.content.contains("common executor code exec"));
+    assert!(result.content.contains("return_code"));
+}
+
 #[test]
 fn plan_mode_catalog_skips_code_execution_tool_but_agent_keeps_it() {
     let mut plan_catalog = vec![api_tool("read_file")];

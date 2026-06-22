@@ -1832,6 +1832,7 @@ impl Engine {
                         let session_id = self.session.id.clone();
                         let started_at = Instant::now();
                         let shell_permits = shell_permits.clone();
+                        let workspace = self.session.workspace.clone();
 
                         tool_tasks.push(async move {
                             let _shell_permit = if plan.name == "exec_shell" {
@@ -1846,6 +1847,7 @@ impl Engine {
                                 tx_event.clone(),
                                 plan.name.clone(),
                                 plan.input.clone(),
+                                workspace,
                                 registry,
                                 mcp_pool,
                                 None,
@@ -1954,58 +1956,6 @@ impl Engine {
                                     tool_exec_lock.clone(),
                                 )
                                 .await;
-
-                            let _ = self
-                                .tx_event
-                                .send(Event::ToolCallComplete {
-                                    id: tool_id.clone(),
-                                    name: tool_name.clone(),
-                                    result: result.clone(),
-                                })
-                                .await;
-
-                            outcomes[plan.index] = Some(ToolExecOutcome {
-                                index: plan.index,
-                                id: tool_id,
-                                name: tool_name,
-                                input: tool_input,
-                                started_at,
-                                result,
-                            });
-                            continue;
-                        }
-
-                        if tool_name == CODE_EXECUTION_TOOL_NAME {
-                            let started_at = Instant::now();
-                            let result =
-                                execute_code_execution_tool(&tool_input, &self.session.workspace)
-                                    .await;
-
-                            let _ = self
-                                .tx_event
-                                .send(Event::ToolCallComplete {
-                                    id: tool_id.clone(),
-                                    name: tool_name.clone(),
-                                    result: result.clone(),
-                                })
-                                .await;
-
-                            outcomes[plan.index] = Some(ToolExecOutcome {
-                                index: plan.index,
-                                id: tool_id,
-                                name: tool_name,
-                                input: tool_input,
-                                started_at,
-                                result,
-                            });
-                            continue;
-                        }
-
-                        if tool_name == JS_EXECUTION_TOOL_NAME {
-                            let started_at = Instant::now();
-                            let result =
-                                execute_js_execution_tool(&tool_input, &self.session.workspace)
-                                    .await;
 
                             let _ = self
                                 .tx_event
@@ -2203,6 +2153,7 @@ impl Engine {
                                 self.tx_event.clone(),
                                 tool_name.clone(),
                                 tool_input.clone(),
+                                self.session.workspace.clone(),
                                 tool_registry,
                                 mcp_pool.clone(),
                                 context_override,
