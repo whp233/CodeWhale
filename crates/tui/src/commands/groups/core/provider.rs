@@ -179,6 +179,7 @@ fn expand_model_alias_for_provider(provider: ApiProvider, name: &str) -> String 
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::test_support::lock_test_env;
     use crate::tui::app::TuiOptions;
     use std::path::PathBuf;
 
@@ -588,6 +589,43 @@ mod tests {
 
         let reset = provider(&mut app, Some("fallback reset"));
         assert!(reset.message.as_deref().unwrap_or("").contains("deepseek"));
+        assert!(matches!(
+            reset.action,
+            Some(AppAction::SwitchProvider {
+                provider: ApiProvider::Deepseek,
+                model: None
+            })
+        ));
+    }
+
+    /// #2574: `/provider fallback reset` returns to the *primary* (chain entry
+    /// 0), not to whatever fallback is currently active. The resolved
+    /// `SwitchProvider` action is the canonical restore path — it re-seats
+    /// `api_provider` and rebuilds the chain at position 0 (see
+    /// `switch_provider`), so a bare `ProviderChain::reset()` is not needed here.
+    #[test]
+    fn provider_fallback_reset_targets_primary_even_when_on_fallback() {
+        let _lock = lock_test_env();
+        let mut app = create_test_app();
+        app.api_provider = ApiProvider::Deepseek;
+        app.provider_chain = Some(codewhale_config::ProviderChain::new(
+            codewhale_config::ProviderKind::Deepseek,
+            &[codewhale_config::ProviderKind::Openrouter],
+        ));
+        // Simulate having already fallen back to the secondary provider.
+        // (Openrouter is treated as ready by default — no readiness snapshot.)
+        let advanced = app.advance_fallback("recoverable error");
+        assert_eq!(advanced, Some(ApiProvider::Openrouter));
+        assert_eq!(app.api_provider, ApiProvider::Openrouter);
+
+        let reset = provider(&mut app, Some("fallback reset"));
+        assert!(
+            reset
+                .message
+                .as_deref()
+                .unwrap_or("")
+                .contains("primary provider: deepseek")
+        );
         assert!(matches!(
             reset.action,
             Some(AppAction::SwitchProvider {
