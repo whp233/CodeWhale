@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchWithStaticInstaller } from "./static-installer";
 
-function ctx(): ExecutionContext {
+function ctx(): unknown {
   return {
     waitUntil: vi.fn(),
     passThroughOnException: vi.fn(),
-  } as unknown as ExecutionContext;
+  };
 }
 
 describe("static installer route", () => {
