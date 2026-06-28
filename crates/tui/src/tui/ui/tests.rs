@@ -11138,6 +11138,7 @@ mod work_sidebar_projection_tests {
             started_at: Some(Utc.with_ymd_and_hms(2026, 5, 16, 12, 1, 0).unwrap()),
             ended_at,
             duration_ms: ended_at.map(|_| 1_234),
+            hunt_verdict: None,
             error: None,
             thread_id: None,
             turn_id: None,

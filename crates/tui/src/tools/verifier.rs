@@ -361,8 +361,7 @@ impl ToolSpec for RunVerifiersTool {
                 summary: "No verifier gates were detected. Provide custom commands or choose a profile that matches this workspace.".to_string(),
                 gates: Vec::new(),
             };
-            return ToolResult::json(&output)
-                .map_err(|err| ToolError::execution_failed(err.to_string()));
+            return verifier_tool_result(&output);
         }
 
         if input.background {
@@ -432,8 +431,23 @@ impl ToolSpec for RunVerifiersTool {
             gates: results,
         };
 
-        ToolResult::json(&output).map_err(|err| ToolError::execution_failed(err.to_string()))
+        verifier_tool_result(&output)
     }
+}
+
+fn verifier_tool_result(output: &RunVerifiersOutput) -> Result<ToolResult, ToolError> {
+    ToolResult::json(output)
+        .map_err(|err| ToolError::execution_failed(err.to_string()))
+        .map(|result| {
+            result.with_metadata(json!({
+                "verifier_verdict": output.verifier_verdict,
+                "hunt_verdict": output.hunt_verdict,
+                "goal_status": output.goal_status,
+                "task_updates": {
+                    "hunt_verdict": output.hunt_verdict
+                }
+            }))
+        })
 }
 
 fn start_background_gates(
@@ -1328,6 +1342,7 @@ mod tests {
             .await
             .expect("execute partial verifier");
         assert_hunt_mapping(&partial.content, "partial", "wounded", "paused");
+        assert_hunt_metadata(&partial, "partial", "wounded", "paused");
 
         if !crate::dependencies::RustC::available() {
             return;
@@ -1350,6 +1365,7 @@ mod tests {
             .await
             .expect("execute passing verifier");
         assert_hunt_mapping(&pass.content, "pass", "hunted", "complete");
+        assert_hunt_metadata(&pass, "pass", "hunted", "complete");
 
         let fail = tool
             .execute(
@@ -1368,6 +1384,7 @@ mod tests {
             .await
             .expect("execute failing verifier");
         assert_hunt_mapping(&fail.content, "fail", "escaped", "blocked");
+        assert_hunt_metadata(&fail, "fail", "escaped", "blocked");
     }
 
     fn assert_hunt_mapping(content: &str, verifier: &str, hunt: &str, goal: &str) {
@@ -1375,6 +1392,14 @@ mod tests {
         assert_eq!(parsed["verifier_verdict"], verifier, "{content}");
         assert_eq!(parsed["hunt_verdict"], hunt, "{content}");
         assert_eq!(parsed["goal_status"], goal, "{content}");
+    }
+
+    fn assert_hunt_metadata(result: &ToolResult, verifier: &str, hunt: &str, goal: &str) {
+        let metadata = result.metadata.as_ref().expect("hunt metadata");
+        assert_eq!(metadata["verifier_verdict"], verifier, "{metadata}");
+        assert_eq!(metadata["hunt_verdict"], hunt, "{metadata}");
+        assert_eq!(metadata["goal_status"], goal, "{metadata}");
+        assert_eq!(metadata["task_updates"]["hunt_verdict"], hunt, "{metadata}");
     }
 
     #[tokio::test]
